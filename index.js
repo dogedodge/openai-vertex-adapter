@@ -4,8 +4,11 @@ const { GoogleGenAI } = require("@google/genai");
 const app = express();
 const PORT = process.env.PORT || 3000;
 const util = require("util");
+const fs = require("fs");
 
 app.use(express.json());
+
+fs.mkdirSync("./log", { recursive: true });
 
 const ai = new GoogleGenAI({
   // apiKey: process.env.GOOGLE_API_KEY,
@@ -29,6 +32,7 @@ app.use("/v1", authMiddleware);
 
 app.get("/v1/models", (req, res) => {
   const models = [
+    { id: "gemini-3-pro-preview", object: "model" },
     { id: "gemini-2.5-pro", object: "model" },
     { id: "gemini-2.5-flash", object: "model" },
     { id: "gemini-1.5-pro", object: "model" },
@@ -39,7 +43,11 @@ app.get("/v1/models", (req, res) => {
 app.post("/v1/chat/completions", async (req, res) => {
   try {
     const { model, messages } = req.body;
-    console.log(JSON.stringify(req.body, null, 2));
+    // console.log(JSON.stringify(req.body, null, 2));
+    fs.appendFileSync(
+      "./log/req.log",
+      `${new Date().toISOString()} - ${JSON.stringify(req.body, null, 2)}\n`
+    );
 
     if (
       !model ||
@@ -72,6 +80,17 @@ app.post("/v1/chat/completions", async (req, res) => {
       role: msg.role === "assistant" ? "model" : "user",
       parts: contentToParts(msg.content),
     }));
+
+    fs.appendFileSync(
+      "./log/req.log",
+      `${new Date().toISOString()} - ${JSON.stringify(
+        {
+          contents,
+        },
+        null,
+        2
+      )}\n`
+    );
 
     // Streaming response
     res.writeHead(200, {
@@ -131,6 +150,17 @@ app.post("/v1/chat/completions", async (req, res) => {
       },
     };
     res.write("data: " + JSON.stringify(finalData) + "\n\n");
+    fs.appendFileSync(
+      "./log/res.log",
+      `${new Date().toISOString()} - ${JSON.stringify(
+        {
+          fullText,
+          usage: finalData.usage,
+        },
+        null,
+        2
+      )}\n`
+    );
     res.write("data: [DONE]\n\n");
     res.end();
   } catch (error) {
