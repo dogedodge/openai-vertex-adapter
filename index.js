@@ -1,17 +1,18 @@
 require("dotenv").config();
 const express = require("express");
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { GoogleGenAI } = require("@google/genai");
 const app = express();
 const PORT = process.env.PORT || 3000;
+const util = require("util");
 
 app.use(express.json());
 
-if (!process.env.GOOGLE_API_KEY) {
-  console.error("GOOGLE_API_KEY environment variable is required");
-  process.exit(1);
-}
-
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+const ai = new GoogleGenAI({
+  // apiKey: process.env.GOOGLE_API_KEY,
+  vertexai: true,
+  project: process.env.GOOGLE_CLOUD_PROJECT,
+  location: process.env.GOOGLE_CLOUD_LOCATION,
+});
 
 const authMiddleware = (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -28,16 +29,17 @@ app.use("/v1", authMiddleware);
 
 app.get("/v1/models", (req, res) => {
   const models = [
+    { id: "gemini-2.5-pro", object: "model" },
+    { id: "gemini-2.5-flash", object: "model" },
     { id: "gemini-1.5-pro", object: "model" },
-    { id: "gemini-1.5-flash", object: "model" },
-    { id: "gemini-pro", object: "model" },
   ];
   res.json({ object: "list", data: models });
 });
 
 app.post("/v1/chat/completions", async (req, res) => {
   try {
-    const { model, messages, max_tokens, temperature, ...other } = req.body;
+    const { model, messages, max_tokens, temperature, stream, ...other } =
+      req.body;
 
     if (
       !model ||
@@ -53,47 +55,72 @@ app.post("/v1/chat/completions", async (req, res) => {
       });
     }
 
-    const vertexModelName = model; // assume model names match, e.g. gemini-1.5-pro
+    // Map OpenAI-style messages to Google GenAI contents
+    const contents = messages.map((msg) => ({
+      role: msg.role === "assistant" ? "model" : "user",
+      parts: [{ text: msg.content }],
+    }));
 
-    const generativeModel = genAI.getGenerativeModel({
-      model: vertexModelName,
+    // Streaming response
+    res.writeHead(200, {
+      "Content-Type": "text/plain",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
     });
 
-    const chat = generativeModel.startChat({ history: [] });
+    const response = await ai.models.generateContentStream({
+      model: model,
+      contents: contents,
+    });
 
-    // Add history
-    for (let i = 0; i < messages.length - 1; i++) {
-      const msg = messages[i];
-      if (msg.role === "user") {
-        chat.history.push({ role: "user", parts: [{ text: msg.content }] });
-      } else if (msg.role === "assistant") {
-        chat.history.push({ role: "model", parts: [{ text: msg.content }] });
-      }
+    let fullText = "";
+    let first = true;
+
+    for await (const chunk of response) {
+      fullText += chunk.text;
+      const delta = first
+        ? { role: "assistant", content: chunk.text }
+        : { content: chunk.text };
+      first = false;
+
+      const data = {
+        id: "chatcmpl-" + Date.now(),
+        object: "chat.completion.chunk",
+        created: Math.floor(Date.now() / 1000),
+        model,
+        choices: [
+          {
+            index: 0,
+            delta,
+            finish_reason: null,
+          },
+        ],
+      };
+      res.write("data: " + JSON.stringify(data) + "\n\n");
     }
 
-    const lastMessage = messages[messages.length - 1];
-    const result = await chat.sendMessage(lastMessage.content);
-    const response = result.response;
-    const text = response.text();
-
-    res.json({
+    // Send final chunk with finish_reason and usage
+    const finalData = {
       id: "chatcmpl-" + Date.now(),
-      object: "chat.completion",
+      object: "chat.completion.chunk",
       created: Math.floor(Date.now() / 1000),
       model,
       choices: [
         {
           index: 0,
-          message: { role: "assistant", content: text },
+          delta: {},
           finish_reason: "stop",
         },
       ],
       usage: {
         prompt_tokens: messages.length * 10,
-        completion_tokens: text.length / 4,
-        total_tokens: messages.length * 10 + text.length / 4,
+        completion_tokens: Math.ceil(fullText.length / 4),
+        total_tokens: messages.length * 10 + Math.ceil(fullText.length / 4),
       },
-    });
+    };
+    res.write("data: " + JSON.stringify(finalData) + "\n\n");
+    res.write("data: [DONE]\n\n");
+    res.end();
   } catch (error) {
     console.error(error);
     res.status(500).json({
