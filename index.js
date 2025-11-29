@@ -144,9 +144,17 @@ app.post("/v1/chat/completions", async (req, res) => {
     res.end();
   } catch (error) {
     console.error(error);
-    res.status(500).json({
-      error: { message: "Internal server error", type: "internal_error" },
+    log({
+      type: "error",
+      error: error.message || "An unknown error occurred.",
     });
+    if (res.headersSent) {
+      res.end();
+    } else {
+      res.status(500).json({
+        error: { message: "Internal server error", type: "internal_error" },
+      });
+    }
   }
 });
 
