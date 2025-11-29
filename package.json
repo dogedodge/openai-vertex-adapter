@@ -1,0 +1,17 @@
+{
+  "name": "openai-vertex-adapter",
+  "version": "1.0.0",
+  "description": "OpenAI-compatible API adapter for Google Cloud Vertex AI",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0"
+  }
+}
