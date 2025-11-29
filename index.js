@@ -38,8 +38,8 @@ app.get("/v1/models", (req, res) => {
 
 app.post("/v1/chat/completions", async (req, res) => {
   try {
-    const { model, messages, max_tokens, temperature, stream, ...other } =
-      req.body;
+    const { model, messages } = req.body;
+    console.log(JSON.stringify(req.body, null, 2));
 
     if (
       !model ||
@@ -55,10 +55,22 @@ app.post("/v1/chat/completions", async (req, res) => {
       });
     }
 
+    // Helper function to convert OpenAI content to Google GenAI parts
+    const contentToParts = (content) => {
+      if (typeof content === "string") {
+        return [{ text: content }];
+      } else if (Array.isArray(content)) {
+        return content.map((item) => ({ text: item.text }));
+      } else {
+        // Fallback for unexpected types
+        return [{ text: String(content) }];
+      }
+    };
+
     // Map OpenAI-style messages to Google GenAI contents
     const contents = messages.map((msg) => ({
       role: msg.role === "assistant" ? "model" : "user",
-      parts: [{ text: msg.content }],
+      parts: contentToParts(msg.content),
     }));
 
     // Streaming response
