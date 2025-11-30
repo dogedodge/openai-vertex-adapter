@@ -5,7 +5,7 @@ const app = express();
 const PORT = process.env.SERVER_PORT || 3000;
 const { log } = require("./logger");
 
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
 
 const ai = new GoogleGenAI({
   // apiKey: process.env.GOOGLE_API_KEY,
