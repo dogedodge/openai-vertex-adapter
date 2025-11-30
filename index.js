@@ -2,7 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const { GoogleGenAI } = require("@google/genai");
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.SERVER_PORT || 3000;
 const { log } = require("./logger");
 
 app.use(express.json());
