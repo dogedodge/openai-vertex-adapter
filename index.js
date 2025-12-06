@@ -14,19 +14,6 @@ const ai = new GoogleGenAI({
   location: process.env.GOOGLE_CLOUD_LOCATION,
 });
 
-const authMiddleware = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({
-      error: { message: "Unauthorized", type: "authentication_error" },
-    });
-  }
-  // OpenAI-style API key accepted, but we use GOOGLE_API_KEY internally
-  next();
-};
-
-app.use("/v1", authMiddleware);
-
 app.get("/v1/models", (req, res) => {
   const models = [
     { id: "gemini-3-pro-preview", object: "model" },
