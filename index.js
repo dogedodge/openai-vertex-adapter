@@ -91,31 +91,69 @@ app.post("/v1/chat/completions", async (req, res) => {
 
     let fullText = "";
     let first = true;
+    let usageMetadata;
 
     for await (const chunk of response) {
-      fullText += chunk.text;
-      const delta = first
-        ? { role: "assistant", content: chunk.text }
-        : { content: chunk.text };
-      first = false;
+      if (chunk.usageMetadata) {
+        usageMetadata = chunk.usageMetadata;
+      }
 
-      const data = {
-        id: "chatcmpl-" + Date.now(),
-        object: "chat.completion.chunk",
-        created: Math.floor(Date.now() / 1000),
-        model,
-        choices: [
-          {
-            index: 0,
-            delta,
-            finish_reason: null,
-          },
-        ],
-      };
-      res.write("data: " + JSON.stringify(data) + "\n\n");
+      const chunkText = chunk.text;
+      if (chunkText) {
+        fullText += chunkText;
+        const delta = first
+          ? { role: "assistant", content: chunkText }
+          : { content: chunkText };
+        first = false;
+
+        const data = {
+          id: "chatcmpl-" + Date.now(),
+          object: "chat.completion.chunk",
+          created: Math.floor(Date.now() / 1000),
+          model,
+          choices: [
+            {
+              index: 0,
+              delta,
+              finish_reason: null,
+            },
+          ],
+        };
+        res.write("data: " + JSON.stringify(data) + "\n\n");
+      }
     }
 
     // Send final chunk with finish_reason and usage
+    let promptTokens = 0;
+    let completionTokens = 0;
+    let totalTokens = 0;
+
+    if (usageMetadata) {
+      promptTokens = usageMetadata.promptTokenCount;
+      completionTokens = usageMetadata.candidatesTokenCount;
+      totalTokens = usageMetadata.totalTokenCount;
+    } else {
+      // Fallback to estimation if usageMetadata is not available
+      const promptCharLength = messages.reduce((acc, msg) => {
+        if (typeof msg.content === "string") {
+          return acc + msg.content.length;
+        }
+        if (Array.isArray(msg.content)) {
+          return (
+            acc +
+            msg.content.reduce(
+              (sum, part) => sum + (part.text ? part.text.length : 0),
+              0
+            )
+          );
+        }
+        return acc;
+      }, 0);
+      promptTokens = Math.ceil(promptCharLength / 4);
+      completionTokens = Math.ceil(fullText.length / 4);
+      totalTokens = promptTokens + completionTokens;
+    }
+
     const finalData = {
       id: "chatcmpl-" + Date.now(),
       object: "chat.completion.chunk",
@@ -129,9 +167,9 @@ app.post("/v1/chat/completions", async (req, res) => {
         },
       ],
       usage: {
-        prompt_tokens: messages.length * 10,
-        completion_tokens: Math.ceil(fullText.length / 4),
-        total_tokens: messages.length * 10 + Math.ceil(fullText.length / 4),
+        prompt_tokens: promptTokens,
+        completion_tokens: completionTokens,
+        total_tokens: totalTokens,
       },
     };
     res.write("data: " + JSON.stringify(finalData) + "\n\n");
@@ -140,6 +178,7 @@ app.post("/v1/chat/completions", async (req, res) => {
       fullText,
       usage: finalData.usage,
     });
+    console.log("Usage:", finalData.usage);
     res.write("data: [DONE]\n\n");
     res.end();
   } catch (error) {
