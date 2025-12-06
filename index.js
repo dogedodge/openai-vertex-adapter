@@ -8,7 +8,6 @@ const { log } = require("./logger");
 app.use(express.json({ limit: "10mb" }));
 
 const ai = new GoogleGenAI({
-  // apiKey: process.env.GOOGLE_API_KEY,
   vertexai: true,
   project: process.env.GOOGLE_CLOUD_PROJECT,
   location: process.env.GOOGLE_CLOUD_LOCATION,
@@ -175,6 +174,14 @@ app.post("/v1/chat/completions", async (req, res) => {
       error: error.message || "An unknown error occurred.",
     });
     if (res.headersSent) {
+      const errorData = {
+        error: {
+          message: error.message || "An error occurred during streaming.",
+          type: "internal_error",
+        },
+      };
+      res.write("data: " + JSON.stringify(errorData) + "\n\n");
+      res.write("data: [DONE]\n\n");
       res.end();
     } else {
       res.status(500).json({
