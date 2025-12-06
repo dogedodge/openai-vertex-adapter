@@ -119,24 +119,19 @@ app.post("/v1/chat/completions", async (req, res) => {
       completionTokens = usageMetadata.candidatesTokenCount;
       totalTokens = usageMetadata.totalTokenCount;
     } else {
-      // Fallback to estimation if usageMetadata is not available
-      const promptCharLength = messages.reduce((acc, msg) => {
-        if (typeof msg.content === "string") {
-          return acc + msg.content.length;
-        }
-        if (Array.isArray(msg.content)) {
-          return (
-            acc +
-            msg.content.reduce(
-              (sum, part) => sum + (part.text ? part.text.length : 0),
-              0
-            )
-          );
-        }
-        return acc;
-      }, 0);
-      promptTokens = Math.ceil(promptCharLength / 4);
-      completionTokens = Math.ceil(fullText.length / 4);
+      // Fallback to token counting if usageMetadata is not available
+      const promptTokenResponse = await ai.models.countTokens({
+        model,
+        contents,
+      });
+      promptTokens = promptTokenResponse.totalTokens;
+
+      const completionTokenResponse = await ai.models.countTokens({
+        model,
+        contents: [{ parts: [{ text: fullText }] }],
+      });
+      completionTokens = completionTokenResponse.totalTokens;
+
       totalTokens = promptTokens + completionTokens;
     }
 
