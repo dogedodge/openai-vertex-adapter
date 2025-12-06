@@ -5,7 +5,7 @@ const app = express();
 const PORT = process.env.SERVER_PORT || 3000;
 const { log } = require("./logger");
 
-app.use(express.json({ limit: "50mb" }));
+app.use(express.json({ limit: "10mb" }));
 
 const ai = new GoogleGenAI({
   // apiKey: process.env.GOOGLE_API_KEY,
@@ -79,7 +79,7 @@ app.post("/v1/chat/completions", async (req, res) => {
 
     // Streaming response
     res.writeHead(200, {
-      "Content-Type": "text/plain",
+      "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
     });
